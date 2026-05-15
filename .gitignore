@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pt
+data/raw/
+data/processed/
+data/splits/
+checkpoints/
+metrics.json
+*.db
+*.db-wal
+*.db-shm
+node_modules/
+frontend/dist/
+.DS_Store

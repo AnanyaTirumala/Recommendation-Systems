@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flask API",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "env": {
+        "FLASK_APP": "serving/app.py",
+        "FLASK_ENV": "development",
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "args": ["run", "--port", "5000"],
+      "jinja": true
+    },
+    {
+      "name": "Train All Models",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/training/train_all.py",
+      "args": ["--device", "mps", "--subset", "0.1"],
+      "env": { "PYTHONPATH": "${workspaceFolder}" }
+    },
+    {
+      "name": "Preprocess Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/training/data_loader.py",
+      "args": [
+        "--data", "data/raw/Books.jsonl",
+        "--output_dir", "data/processed",
+        "--subset", "0.1"
+      ],
+      "env": { "PYTHONPATH": "${workspaceFolder}" }
+    },
+    {
+      "name": "Evaluate Models",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/training/evaluate.py",
+      "args": ["--checkpoint_dir", "checkpoints/", "--output", "metrics.json"],
+      "env": { "PYTHONPATH": "${workspaceFolder}" }
+    }
+  ]
+}

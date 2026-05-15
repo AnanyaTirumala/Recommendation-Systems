@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.debugpy",
+    "ms-python.black-formatter",
+    "ms-python.flake8",
+    "ms-python.isort",
+    "ms-toolsai.jupyter",
+    "njpwerner.autodocstring",
+    "eamodio.gitlens",
+    "mechatroner.rainbow-csv",
+    "ms-vscode.makefile-tools"
+  ]
+}
