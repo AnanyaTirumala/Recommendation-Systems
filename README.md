@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Diffusion Models for E-Commerce Recommendation
 ### Comparative Study · Amazon Books Dataset · macOS CPU/MPS
 
