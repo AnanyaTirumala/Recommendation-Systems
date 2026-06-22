@@ -1,4 +1,4 @@
-import BookCard from "./BookCard";
+import ItemCard from "./ItemCard";
 
 function ModelPanel({ model, data, isLoading }) {
   const typeColors = {
@@ -45,7 +45,7 @@ function ModelPanel({ model, data, isLoading }) {
           </div>
         )}
         {!isLoading && data?.recommendations?.map(rec => (
-          <BookCard key={rec.item_id} rec={rec} modelColor={model.color} />
+          <ItemCard key={rec.item_id} rec={rec} modelColor={model.color} />
         ))}
         {!isLoading && !data && (
           <div style={{ color: "#334155", fontSize: 11, padding: "20px 0",

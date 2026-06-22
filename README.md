@@ -45,10 +45,13 @@ python training/train_all.py --device mps --subset 0.1
 # 6. Evaluate
 python training/evaluate.py --checkpoint_dir checkpoints/ --output metrics.json
 
-# 7. Start Flask API
-FLASK_APP=serving/app.py flask run --port 5000
+# Evaluate only for one dataset
+python training/evaluate.py --dataset yelp
 
-# 8. Start React frontend (new terminal)
+# 7. Start Flask API
+FLASK_APP=serving/app.py flask run --port 5001
+
+# 8. Start React frontend (new terminal) 
 cd frontend && npm install && npm run dev
 # → http://localhost:5173
 ```

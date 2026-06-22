@@ -10,8 +10,14 @@ import pandas as pd
 from peewee import (SqliteDatabase, Model, IntegerField, TextField,
                     FloatField, AutoField)
 
-DB_PATH = os.environ.get("DB_PATH", "rec_study.db")
+_DATASET = os.environ.get("DATASET", "videogames")
+DB_PATH  = os.environ.get("DB_PATH", f"rec_study_{_DATASET}.db")
 db = SqliteDatabase(DB_PATH, pragmas={"journal_mode": "wal", "cache_size": -64000})
+
+DB_PATHS = {
+    "videogames": "rec_study_videogames.db",
+    "yelp":       "rec_study_yelp.db",
+}
 
 
 class BaseModel(Model):
@@ -75,7 +81,7 @@ def init_db(processed_dir="data/processed", splits_dir="data/splits"):
         User.insert_many(batch).on_conflict_replace().execute()
     print(f"  {User.select().count()} users inserted.")
 
-    meta_path = os.path.join(processed_dir, "books_meta.parquet")
+    meta_path = os.path.join(processed_dir, "labels_meta.parquet")
     if os.path.exists(meta_path):
         print("Inserting books...")
         meta = pd.read_parquet(meta_path)
@@ -102,11 +108,11 @@ def get_book(internal_id):
     try:
         b = Book.get(Book.internal_id == internal_id)
         return {"internal_id": b.internal_id, "asin": b.asin,
-                "title": b.title or f"Book #{internal_id}", "author": b.author,
+                "title": b.title or f"Item #{internal_id}", "author": b.author,
                 "categories": json.loads(b.categories or "[]"),
                 "image_url": b.image_url, "avg_rating": b.avg_rating}
     except Book.DoesNotExist:
-        return {"internal_id": internal_id, "asin": "", "title": f"Book #{internal_id}",
+        return {"internal_id": internal_id, "asin": "", "title": f"Item #{internal_id}",
                 "author": "", "categories": [], "image_url": "", "avg_rating": 0.0}
 
 
@@ -131,10 +137,20 @@ def set_cache(user_id, model_name, top_k, results):
 
 
 if __name__ == "__main__":
+    _DATA_PATHS = {
+        "videogames": ("data/processed",      "data/splits"),
+        "yelp":       ("data/yelp/processed", "data/yelp/splits"),
+    }
     p = argparse.ArgumentParser()
     p.add_argument("--init", action="store_true")
-    p.add_argument("--processed_dir", default="data/processed")
-    p.add_argument("--splits_dir", default="data/splits")
+    p.add_argument("--dataset", default="videogames", choices=list(_DATA_PATHS.keys()))
+    p.add_argument("--processed_dir", default=None)
+    p.add_argument("--splits_dir",    default=None)
     args = p.parse_args()
     if args.init:
-        init_db(args.processed_dir, args.splits_dir)
+        default_processed, default_splits = _DATA_PATHS[args.dataset]
+        processed_dir = args.processed_dir or default_processed
+        splits_dir    = args.splits_dir    or default_splits
+        # Point the db singleton at the correct file before init
+        db.init(DB_PATHS[args.dataset], pragmas={"journal_mode": "wal", "cache_size": -64000})
+        init_db(processed_dir, splits_dir)

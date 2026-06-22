@@ -35,6 +35,12 @@ def get_device(requested: str = "auto"):
 
 # ─── data helpers ────────────────────────────────────────────────────────────
 
+DATASET_PATHS = {
+    "videogames": {"processed": "data/processed",      "splits": "data/splits"},
+    "yelp":       {"processed": "data/yelp/processed", "splits": "data/yelp/splits"},
+}
+
+
 def load_data(processed_dir="data/processed", splits_dir="data/splits"):
     with open(os.path.join(processed_dir, "mappings.pkl"), "rb") as f:
         mappings = pickle.load(f)
@@ -59,9 +65,10 @@ def neg_sample_bpr(train_mat: sp.csr_matrix, user_ids: np.ndarray) -> np.ndarray
     return np.array(negs)
 
 
-def save_checkpoint(model, optimizer, epoch, metric, config, name, checkpoint_dir):
+def save_checkpoint(model, optimizer, epoch, metric, config, name, checkpoint_dir,
+                    dataset: str = "videogames"):
     os.makedirs(checkpoint_dir, exist_ok=True)
-    path = os.path.join(checkpoint_dir, f"{name}.pt")
+    path = os.path.join(checkpoint_dir, f"{dataset}_{name}.pt")
     torch.save({
         "model_state_dict":     model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
@@ -74,7 +81,7 @@ def save_checkpoint(model, optimizer, epoch, metric, config, name, checkpoint_di
 # ─── training routines ───────────────────────────────────────────────────────
 
 def train_neumf(mappings, train_mat, val_mat, device, epochs, batch_size,
-                lr, checkpoint_dir):
+                lr, checkpoint_dir, dataset="videogames"):
     print("\n══ Training NeuMF ══")
     n_users, n_items = mappings["n_users"], mappings["n_items"]
     cfg = dict(n_users=n_users, n_items=n_items, emb_size=64,
@@ -109,12 +116,13 @@ def train_neumf(mappings, train_mat, val_mat, device, epochs, batch_size,
             total_loss += loss.item()
         if epoch % 10 == 0:
             print(f"  Epoch {epoch}/{epochs}  loss={total_loss/max(1,len(idx)//batch_size):.4f}")
-    save_checkpoint(model, opt, epochs, best, cfg, "neumf", checkpoint_dir)
+    save_checkpoint(model, opt, epochs, best, cfg, "neumf", checkpoint_dir, dataset)
     print("  ✓ NeuMF checkpoint saved.")
 
 
 def train_diffrec(mappings, train_mat, device, epochs, batch_size, lr,
-                  checkpoint_dir, latent=False, item_emb_path=None):
+                  checkpoint_dir, latent=False, item_emb_path=None,
+                  dataset="videogames"):
     name = "ldiffrec" if latent else "diffrec"
     print(f"\n══ Training {'L-DiffRec' if latent else 'DiffRec'} ══")
     n_items = mappings["n_items"]
@@ -147,12 +155,12 @@ def train_diffrec(mappings, train_mat, device, epochs, batch_size, lr,
         if epoch % 5 == 0:
             print(f"  Epoch {epoch}/{epochs}  loss={total_loss:.4f}")
 
-    save_checkpoint(model, opt, epochs, 0.0, cfg, name, checkpoint_dir)
+    save_checkpoint(model, opt, epochs, 0.0, cfg, name, checkpoint_dir, dataset)
     print(f"  ✓ {name} checkpoint saved.")
 
 
 def train_lightgcn(mappings, train_mat, device, epochs, batch_size, lr,
-                   checkpoint_dir):
+                   checkpoint_dir, dataset="videogames"):
     print("\n══ Training LightGCN ══")
     n_users, n_items = mappings["n_users"], mappings["n_items"]
     cfg = dict(n_users=n_users, n_items=n_items, emb_dim=64, n_layers=3)
@@ -185,13 +193,14 @@ def train_lightgcn(mappings, train_mat, device, epochs, batch_size, lr,
     with torch.no_grad():
         item_embs = model.get_item_embeddings()
         torch.save(item_embs.cpu(),
-                   os.path.join(checkpoint_dir, "lightgcn_item_emb.pt"))
-    save_checkpoint(model, opt, epochs, 0.0, cfg, "lightgcn", checkpoint_dir)
+                   os.path.join(checkpoint_dir, f"{dataset}_lightgcn_item_emb.pt"))
+    save_checkpoint(model, opt, epochs, 0.0, cfg, "lightgcn", checkpoint_dir, dataset)
     print("  ✓ LightGCN checkpoint saved.")
 
 
 def train_graph_model(name, model_cls, extra_cfg, mappings, train_mat,
-                      device, epochs, batch_size, lr, checkpoint_dir):
+                      device, epochs, batch_size, lr, checkpoint_dir,
+                      dataset="videogames"):
     print(f"\n══ Training {name} ══")
     n_users, n_items = mappings["n_users"], mappings["n_items"]
     cfg = dict(n_users=n_users, n_items=n_items, **extra_cfg)
@@ -222,7 +231,7 @@ def train_graph_model(name, model_cls, extra_cfg, mappings, train_mat,
         if epoch % 5 == 0:
             print(f"  Epoch {epoch}/{epochs}  loss={total_loss:.4f}")
 
-    save_checkpoint(model, opt, epochs, 0.0, cfg, name, checkpoint_dir)
+    save_checkpoint(model, opt, epochs, 0.0, cfg, name, checkpoint_dir, dataset)
     print(f"  ✓ {name} checkpoint saved.")
 
 
@@ -231,6 +240,9 @@ def train_graph_model(name, model_cls, extra_cfg, mappings, train_mat,
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--device", default="auto")
+    p.add_argument("--dataset", default="videogames",
+                   choices=list(DATASET_PATHS.keys()),
+                   help="Which dataset to train on (determines data paths and checkpoint prefix)")
     p.add_argument("--checkpoint_dir", default="checkpoints/")
     p.add_argument("--subset", type=float, default=1.0,
                    help="Must match value used in data_loader.py")
@@ -246,15 +258,17 @@ def main():
     args = p.parse_args()
 
     device = get_device(args.device)
-    print(f"Device: {device}")
+    print(f"Device: {device}  Dataset: {args.dataset}")
 
-    mappings, train_mat, val_mat, train_df = load_data()
+    paths = DATASET_PATHS[args.dataset]
+    mappings, train_mat, val_mat, train_df = load_data(
+        processed_dir=paths["processed"], splits_dir=paths["splits"])
     n_users, n_items = mappings["n_users"], mappings["n_items"]
     print(f"Dataset: {n_users:,} users × {n_items:,} items  "
           f"(density={train_mat.nnz/(n_users*n_items)*100:.4f}%)")
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
-    log_path = os.path.join(args.checkpoint_dir, "training_log.jsonl")
+    log_path = os.path.join(args.checkpoint_dir, f"{args.dataset}_training_log.jsonl")
 
     # Training order is fixed (LightGCN first for L-DiffRec dependency)
     ordered = ["lightgcn","neumf","diffrec","ldiffrec","giffcf","cfdiff","gdmcf"]
@@ -265,20 +279,22 @@ def main():
         if name == "lightgcn":
             train_lightgcn(mappings, train_mat, device,
                            args.epochs_lightgcn, args.batch_size, args.lr,
-                           args.checkpoint_dir)
+                           args.checkpoint_dir, dataset=args.dataset)
         elif name == "neumf":
             train_neumf(mappings, train_mat, val_mat, device,
                         args.epochs_neumf, args.batch_size, args.lr,
-                        args.checkpoint_dir)
+                        args.checkpoint_dir, dataset=args.dataset)
         elif name == "diffrec":
             train_diffrec(mappings, train_mat, device,
                           args.epochs_diffrec, min(args.batch_size, 64), args.lr,
-                          args.checkpoint_dir, latent=False)
+                          args.checkpoint_dir, latent=False, dataset=args.dataset)
         elif name == "ldiffrec":
-            emb_path = os.path.join(args.checkpoint_dir, "lightgcn_item_emb.pt")
+            emb_path = os.path.join(args.checkpoint_dir,
+                                    f"{args.dataset}_lightgcn_item_emb.pt")
             train_diffrec(mappings, train_mat, device,
                           args.epochs_diffrec, min(args.batch_size, 64), args.lr,
-                          args.checkpoint_dir, latent=True, item_emb_path=emb_path)
+                          args.checkpoint_dir, latent=True,
+                          item_emb_path=emb_path, dataset=args.dataset)
         elif name == "giffcf":
             from models.giffcf import GiffCF
             train_graph_model("giffcf", GiffCF,
@@ -286,7 +302,7 @@ def main():
                                    top_k_graph=50, T_inf=10),
                               mappings, train_mat, device,
                               args.epochs_graph, min(args.batch_size, 32),
-                              args.lr, args.checkpoint_dir)
+                              args.lr, args.checkpoint_dir, dataset=args.dataset)
         elif name == "cfdiff":
             from models.cfdiff import CFDiff
             train_graph_model("cfdiff", CFDiff,
@@ -294,7 +310,7 @@ def main():
                                    max_neighbors=20, T=1000, T_inf=10),
                               mappings, train_mat, device,
                               args.epochs_graph, min(args.batch_size, 64),
-                              args.lr, args.checkpoint_dir)
+                              args.lr, args.checkpoint_dir, dataset=args.dataset)
         elif name == "gdmcf":
             from models.gdmcf import GDMCF
             train_graph_model("gdmcf", GDMCF,
@@ -302,7 +318,7 @@ def main():
                                    T=500, T_inf=10),
                               mappings, train_mat, device,
                               args.epochs_graph, min(args.batch_size, 64),
-                              args.lr, args.checkpoint_dir)
+                              args.lr, args.checkpoint_dir, dataset=args.dataset)
 
         elapsed = time.time() - t0
         with open(log_path, "a") as f:

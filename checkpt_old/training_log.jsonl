@@ -1,0 +1,4 @@
+{"model": "lightgcn", "elapsed_s": 7463.9}
+{"model": "neumf", "elapsed_s": 1028.7}
+{"model": "diffrec", "elapsed_s": 3442.2}
+{"model": "ldiffrec", "elapsed_s": 409.5}

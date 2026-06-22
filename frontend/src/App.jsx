@@ -6,30 +6,36 @@ import MetricsDashboard from "./components/MetricsDashboard";
 import { fetchRecommendations, fetchSampleUsers, fetchStatus, fetchMetrics } from "./api";
 
 const ALL_MODELS = [
-  { id: "neumf",    label: "NeuMF",     type: "baseline",   color: "#F59E0B" },
-  { id: "diffrec",  label: "DiffRec",   type: "diffusion",  color: "#3B82F6" },
-  { id: "ldiffrec", label: "L-DiffRec", type: "diffusion",  color: "#60A5FA" },
-  { id: "giffcf",   label: "GiffCF",    type: "graph-diff", color: "#10B981" },
-  { id: "cfdiff",   label: "CF-Diff",   type: "graph-diff", color: "#34D399" },
-  { id: "gdmcf",    label: "GDMCF",     type: "graph-diff", color: "#6EE7B7" },
-  { id: "lightgcn", label: "LightGCN",  type: "gnn",        color: "#8B5CF6" },
+  { id: "neumf", label: "NeuMF", type: "baseline", color: "#F59E0B" },
+  { id: "diffrec", label: "DiffRec", type: "diffusion", color: "#3B82F6" },
+  { id: "ldiffrec", label: "L-DiffRec", type: "diffusion", color: "#60A5FA" },
+  { id: "giffcf", label: "GiffCF", type: "graph-diff", color: "#10B981" },
+  { id: "cfdiff", label: "CF-Diff", type: "graph-diff", color: "#34D399" },
+  { id: "gdmcf", label: "GDMCF", type: "graph-diff", color: "#6EE7B7" },
+  { id: "lightgcn", label: "LightGCN", type: "gnn", color: "#8B5CF6" },
+];
+
+const DATASETS = [
+  { id: "videogames", label: "Amazon Video Games" },
+  { id: "yelp",       label: "Yelp" },
 ];
 
 export default function App() {
-  const [users,        setUsers]        = useState([]);
+  const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [activeModels, setActiveModels] = useState(ALL_MODELS.map(m => m.id));
-  const [results,      setResults]      = useState({});
-  const [metrics,      setMetrics]      = useState(null);
-  const [loading,      setLoading]      = useState({});
-  const [status,       setStatus]       = useState({});
-  const [topK,         setTopK]         = useState(10);
+  const [results, setResults] = useState({});
+  const [metrics, setMetrics] = useState(null);
+  const [loading, setLoading] = useState({});
+  const [status, setStatus] = useState({});
+  const [topK, setTopK] = useState(10);
+  const [dataset, setDataset] = useState("videogames");
 
   useEffect(() => {
     fetchSampleUsers().then(setUsers).catch(console.error);
-    fetchMetrics().then(setMetrics).catch(console.error);
-    fetchStatus().then(s => setStatus(s.models || {})).catch(console.error);
-  }, []);
+    fetchMetrics(dataset).then(setMetrics).catch(console.error);
+    fetchStatus(dataset).then(s => setStatus(s.models || {})).catch(console.error);
+  }, [dataset]);
 
   async function handleRun() {
     if (!selectedUser) return;
@@ -42,33 +48,38 @@ export default function App() {
     await Promise.allSettled(
       activeModels.map(async (modelId) => {
         try {
-          const data = await fetchRecommendations(selectedUser, [modelId], topK);
-          setResults(prev => ({
-            ...prev,
-            [modelId]: data.results[modelId] || { recommendations: [], latency_ms: 0 },
-          }));
+          const data = await fetchRecommendations(selectedUser, [modelId], topK, dataset);
+          const modelResult = data.results[modelId]
+            || (data.errors?.[modelId] ? { error: data.errors[modelId] } : { recommendations: [], latency_ms: 0 });
+          setResults(prev => ({ ...prev, [modelId]: modelResult }));
         } catch (e) {
           setResults(prev => ({ ...prev, [modelId]: { error: e.message } }));
         } finally {
-          setLoading(prev => { const n = {...prev}; delete n[modelId]; return n; });
+          setLoading(prev => { const n = { ...prev }; delete n[modelId]; return n; });
         }
       })
     );
   }
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#0F172A",
-                  minHeight: "100vh", color: "#E2E8F0", padding: "0" }}>
+    <div style={{
+      fontFamily: "'IBM Plex Mono', monospace", background: "#0F172A",
+      minHeight: "100vh", color: "#E2E8F0", padding: "0"
+    }}>
       {/* Header */}
-      <header style={{ background: "#1E293B", borderBottom: "1px solid #334155",
-                       padding: "16px 32px", display: "flex",
-                       alignItems: "center", gap: 16 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#38BDF8",
-                      letterSpacing: "-0.5px" }}>
-          ⬡ DiffRec Study
+      <header style={{
+        background: "#1E293B", borderBottom: "1px solid #334155",
+        padding: "16px 32px", display: "flex",
+        alignItems: "center", gap: 16
+      }}>
+        <div style={{
+          fontSize: 22, fontWeight: 700, color: "#38BDF8",
+          letterSpacing: "-0.5px"
+        }}>
+          ✱ Recommendation Systems Study ✱
         </div>
         <div style={{ fontSize: 12, color: "#64748B", flex: 1 }}>
-          Comparative Evaluation · Amazon Books · 7 Models
+          Comparative Evaluation of Diffusion model · 4 Models
         </div>
         <div style={{ fontSize: 11, color: "#475569" }}>
           device: {status._device || "…"}
@@ -77,40 +88,72 @@ export default function App() {
 
       <div style={{ padding: "24px 32px" }}>
         {/* Controls */}
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-end",
-                      flexWrap: "wrap", marginBottom: 24 }}>
-          <UserSelector users={users} selected={selectedUser}
-                        onSelect={setSelectedUser} />
+        <div style={{
+          display: "flex", gap: 16, alignItems: "flex-end",
+          flexWrap: "wrap", marginBottom: 24
+        }}>
+          {/* Dataset toggle */}
           <div>
-            <label style={{ display: "block", fontSize: 11, color: "#64748B",
-                            marginBottom: 4 }}>TOP-K</label>
+            <label style={{ display: "block", fontSize: 11, color: "#64748B", marginBottom: 4 }}>
+              DATASET
+            </label>
+            <div style={{ display: "flex", gap: 0, borderRadius: 6, overflow: "hidden",
+                          border: "1px solid #334155" }}>
+              {DATASETS.map(d => (
+                <button key={d.id} onClick={() => { setDataset(d.id); setResults({}); }}
+                  style={{
+                    padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: "none",
+                    background: dataset === d.id ? "#0EA5E9" : "#1E293B",
+                    color: dataset === d.id ? "#fff" : "#94A3B8",
+                    transition: "background 0.15s",
+                  }}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <UserSelector users={users} selected={selectedUser}
+            onSelect={setSelectedUser} />
+          <div>
+            <label style={{
+              display: "block", fontSize: 11, color: "#64748B",
+              marginBottom: 4
+            }}>TOP-K</label>
             <select value={topK} onChange={e => setTopK(Number(e.target.value))}
-                    style={{ background: "#1E293B", color: "#E2E8F0",
-                             border: "1px solid #334155", borderRadius: 6,
-                             padding: "8px 12px", fontSize: 13 }}>
+              style={{
+                background: "#1E293B", color: "#E2E8F0",
+                border: "1px solid #334155", borderRadius: 6,
+                padding: "8px 12px", fontSize: 13
+              }}>
               {[5, 10, 20].map(k => <option key={k} value={k}>{k}</option>)}
             </select>
           </div>
           <button onClick={handleRun} disabled={!selectedUser}
-                  style={{ background: selectedUser ? "#0EA5E9" : "#334155",
-                           color: selectedUser ? "#fff" : "#64748B",
-                           border: "none", borderRadius: 6, padding: "9px 24px",
-                           fontSize: 13, fontWeight: 600, cursor: selectedUser ? "pointer" : "not-allowed",
-                           transition: "background 0.2s" }}>
+            style={{
+              background: selectedUser ? "#0EA5E9" : "#334155",
+              color: selectedUser ? "#fff" : "#64748B",
+              border: "none", borderRadius: 6, padding: "9px 24px",
+              fontSize: 13, fontWeight: 600, cursor: selectedUser ? "pointer" : "not-allowed",
+              transition: "background 0.2s"
+            }}>
             ▶ Run Inference
           </button>
         </div>
 
         <ModelToggle models={ALL_MODELS} active={activeModels}
-                     onChange={setActiveModels} status={status} />
+          onChange={setActiveModels} status={status} />
 
         {/* Results */}
         {Object.keys(results).length > 0 || Object.keys(loading).length > 0 ? (
           <ResultsGrid models={ALL_MODELS.filter(m => activeModels.includes(m.id))}
-                       results={results} loading={loading} />
+            results={results} loading={loading} />
         ) : (
-          <div style={{ textAlign: "center", padding: "80px 0", color: "#334155",
-                        fontSize: 14 }}>
+          <div style={{
+            textAlign: "center", padding: "80px 0", color: "#334155",
+            fontSize: 14
+          }}>
             Select a user and click Run Inference to compare recommendations.
           </div>
         )}

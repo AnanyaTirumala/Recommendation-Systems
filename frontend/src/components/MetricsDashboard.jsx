@@ -1,13 +1,19 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 
+// Checkpoint keys are "{dataset}_{model}" — strip the prefix to get the bare model id.
+function bareModelId(key) {
+  return key.replace(/^[^_]+_/, "");
+}
+
 export default function MetricsDashboard({ metrics, models }) {
   const colorMap = Object.fromEntries(models.map(m => [m.id, m.color]));
+  const labelMap = Object.fromEntries(models.map(m => [m.id, m.label]));
   const metricKeys = ["Recall@10", "NDCG@10", "MRR"];
 
   const chartData = metricKeys.map(key => {
     const entry = { metric: key };
-    Object.entries(metrics).forEach(([model, vals]) => {
-      entry[model] = +(vals[key] ?? 0).toFixed(4);
+    Object.entries(metrics).forEach(([ckptKey, vals]) => {
+      entry[ckptKey] = +(vals[key] ?? 0).toFixed(4);
     });
     return entry;
   });
@@ -25,11 +31,16 @@ export default function MetricsDashboard({ metrics, models }) {
           <XAxis dataKey="metric" tick={{ fill: "#94A3B8", fontSize: 12 }} />
           <YAxis tick={{ fill: "#64748B", fontSize: 11 }} domain={[0, "auto"]} />
           <Tooltip contentStyle={{ background: "#0F172A", border: "1px solid #334155",
-                                    borderRadius: 6, color: "#E2E8F0" }} />
-          <Legend wrapperStyle={{ fontSize: 12, color: "#94A3B8" }} />
-          {Object.keys(metrics).map(modelId => (
-            <Bar key={modelId} dataKey={modelId}
-                 fill={colorMap[modelId] || "#64748B"}
+                                    borderRadius: 6, color: "#E2E8F0" }}
+                   formatter={(value, ckptKey) => [
+                     value,
+                     labelMap[bareModelId(ckptKey)] || ckptKey,
+                   ]} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "#94A3B8" }}
+                  formatter={ckptKey => labelMap[bareModelId(ckptKey)] || ckptKey} />
+          {Object.keys(metrics).map(ckptKey => (
+            <Bar key={ckptKey} dataKey={ckptKey}
+                 fill={colorMap[bareModelId(ckptKey)] || "#64748B"}
                  radius={[3, 3, 0, 0]} />
           ))}
         </BarChart>
@@ -41,6 +52,7 @@ export default function MetricsDashboard({ metrics, models }) {
         <thead>
           <tr style={{ borderBottom: "1px solid #334155" }}>
             <th style={{ textAlign: "left", padding: "6px 8px", color: "#64748B" }}>Model</th>
+            <th style={{ textAlign: "left", padding: "6px 8px", color: "#64748B" }}>Checkpoint</th>
             {metricKeys.map(k => (
               <th key={k} style={{ textAlign: "right", padding: "6px 8px", color: "#64748B" }}>
                 {k}
@@ -49,20 +61,26 @@ export default function MetricsDashboard({ metrics, models }) {
           </tr>
         </thead>
         <tbody>
-          {Object.entries(metrics).map(([modelId, vals]) => (
-            <tr key={modelId} style={{ borderBottom: "1px solid #1E293B" }}>
-              <td style={{ padding: "6px 8px", color: colorMap[modelId] || "#E2E8F0",
-                           fontWeight: 600 }}>
-                {models.find(m => m.id === modelId)?.label || modelId}
-              </td>
-              {metricKeys.map(k => (
-                <td key={k} style={{ textAlign: "right", padding: "6px 8px",
-                                     color: "#94A3B8" }}>
-                  {(vals[k] ?? 0).toFixed(4)}
+          {Object.entries(metrics).map(([ckptKey, vals]) => {
+            const mid = bareModelId(ckptKey);
+            return (
+              <tr key={ckptKey} style={{ borderBottom: "1px solid #1E293B" }}>
+                <td style={{ padding: "6px 8px",
+                             color: colorMap[mid] || "#E2E8F0", fontWeight: 600 }}>
+                  {labelMap[mid] || mid}
                 </td>
-              ))}
-            </tr>
-          ))}
+                <td style={{ padding: "6px 8px", color: "#475569", fontFamily: "monospace" }}>
+                  {ckptKey}.pt
+                </td>
+                {metricKeys.map(k => (
+                  <td key={k} style={{ textAlign: "right", padding: "6px 8px",
+                                       color: "#94A3B8" }}>
+                    {(vals[k] ?? 0).toFixed(4)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
