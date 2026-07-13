@@ -78,21 +78,30 @@ def remap_ids(df: pd.DataFrame):
 
 
 def temporal_split(df: pd.DataFrame, val_r: float = 0.1, test_r: float = 0.1):
-    print("[5/6] Temporal per-user split")
+    """Leave-one-out per-user split.
+
+    For every user with >= 3 interactions, the most recent interaction becomes
+    the single test positive, the second most recent becomes the single val
+    positive, and everything else is training. Users with < 3 interactions have
+    no held-out item and go entirely to train.
+
+    This gives every test user exactly ONE ground-truth item, so Recall@K /
+    NDCG@K / MRR measure the same task for every user and are directly
+    comparable across datasets regardless of how active users are. (Previously
+    the last 10% of each user's history was held out, so power users had dozens
+    of test positives and were unfairly penalized.) The val_r / test_r args are
+    kept for signature compatibility but are no longer used.
+    """
+    print("[5/6] Leave-one-out per-user split")
     tr, va, te = [], [], []
     for _, g in tqdm(df.groupby("user_idx"), desc="  splitting"):
         g = g.sort_values("timestamp")
         n = len(g)
         if n < 3:
             tr.append(g); continue
-        nt = max(1, int(n * test_r))
-        nv = max(1, int(n * val_r))
-        nt_r = n - nt - nv
-        if nt_r < 1:
-            tr.append(g.iloc[:-1]); te.append(g.iloc[-1:]); continue
-        tr.append(g.iloc[:nt_r])
-        va.append(g.iloc[nt_r:nt_r+nv])
-        te.append(g.iloc[nt_r+nv:])
+        tr.append(g.iloc[:-2])   # all but the last two interactions
+        va.append(g.iloc[-2:-1]) # second most recent = val positive
+        te.append(g.iloc[-1:])   # most recent      = test positive
     train = pd.concat(tr, ignore_index=True)
     val   = pd.concat(va, ignore_index=True) if va else pd.DataFrame(columns=df.columns)
     test  = pd.concat(te, ignore_index=True) if te else pd.DataFrame(columns=df.columns)
